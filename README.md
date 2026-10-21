@@ -1,19 +1,19 @@
 # Voice Bubble
 
-An Android prototype: a floating mic bubble over any app that gets Gboard's Rambler to type into a
-small floating text box instead of the app you're in. From the box, Insert puts the text into the
-field you're editing in that app, or Copy takes it.
+An Android prototype: a floating mic bubble over any app that drives Gboard's Rambler. Tap it,
+ramble while you keep using the phone, tap it again, and the text goes into the field you were
+typing in.
 
-Rambler has no API: it runs only inside Gboard, from Gboard's mic key. So Voice Bubble doesn't
-replace it, it drives it. A bubble tap focuses the floating box, Gboard opens on it, and the
-accessibility service taps Gboard's mic key for you. Tap the bubble again to finish.
+Rambler has no API: it runs only inside Gboard, from Gboard's mic key. So Voice Bubble drives it.
+The first tap focuses an invisible one-pixel text field, Gboard opens on it, and the accessibility
+service taps Gboard's mic key. The second tap presses Rambler's finish key, waits for the text,
+closes the keyboard and pastes the text into the field of the app underneath.
 
-The catch: while Rambler listens, Gboard is on screen, as it is everywhere. Gboard's floating
-keyboard mode (in Gboard's toolbar) makes it small. Whether you can scroll the app behind while
-Rambler keeps listening is the open question; see "What's verified".
+The catch: while Rambler listens, Gboard is on screen. Switch Gboard to its floating mode
+(Gboard toolbar → ⋮ → Floating) and shrink it into a corner; the rest of the screen stays usable.
 
-For dictating while you scroll, there is a second mode, **Keep scrolling**: no keyboard, Google's
-standard Android recognizer instead of Rambler (no clean-up of ums and restarts).
+There is also a **Keep scrolling** mode with no keyboard at all: Google's standard Android
+recognizer instead of Rambler (no clean-up of ums and restarts).
 
 ## Install
 
@@ -30,13 +30,17 @@ standard Android recognizer instead of Rambler (no clean-up of ums and restarts)
 
 ## Use
 
-- **Tap** the bubble: the box opens and Rambler starts listening. Tap again to finish.
-- **Long-press**: show or hide the box.
+1. Tap the text field you want to fill, so it has the cursor.
+2. **Tap** the bubble: Gboard opens and Rambler starts listening. Scroll, read, switch apps.
+3. **Tap** it again: the text goes into that field.
+
+- **Long-press**: insert the last dictation again.
 - **Drag**: move the bubble.
-- **Insert**: puts the box's text at the cursor of the focused field in the app underneath, then
-  clears the box (a setting). Tap that field first so it has the cursor.
-- Tap the box to edit the text by hand with the keyboard.
 - Turn it off from the app or from its notification.
+
+If the second tap doesn't insert, the bubble didn't recognise Rambler's finish key. Open Voice
+Bubble → "If the second tap doesn't insert" → **Refresh and copy**, and send the list of key
+labels it shows.
 
 ## Build
 
@@ -49,13 +53,13 @@ The debug key is in the repo on purpose so every build installs over the last.
 CI runs `scripts/emulator-smoke.sh` on an API 36 Google APIs emulator, which ships Gboard (but not
 Rambler, and has no voice):
 
-- The bubble service starts; a bubble tap opens the box and gives it the focus; keys typed then land
-  in the box, not the app behind.
-- Insert puts the box's text at the cursor of another activity's field ("Hello" became
-  "Hello rambler text"), through the accessibility service's paste.
-- With Gboard's microphone allowed, the bubble finds Gboard's "Use voice typing" key and taps it.
-- A swipe on the app behind, with voice typing open, left the focus on the box.
+- The bubble service starts; a tap opens Gboard on the invisible field; keys typed then land in
+  the bubble's buffer, not the app behind.
+- The second tap, with nothing else done, puts that text into another activity's field ("Hello"
+  became "Hello rambler text") through the accessibility service's paste.
+- With Gboard's microphone allowed, the bubble finds Gboard's "Use voice typing" key.
+- A swipe on the app behind left the focus on the invisible field.
 
-Not verified anywhere: Rambler itself, and whether Gboard keeps listening while you scroll a real
-app. That needs a Pixel with Rambler. On first use Gboard may ask for the microphone, and that
-dialog takes the focus from the box: allow it once, then tap the bubble again.
+Not verified anywhere: Rambler itself, the label of its finish key (the bubble matches done,
+finish, stop, insert and their French forms), and whether Rambler keeps listening while you scroll a
+real app. That needs a Pixel with Rambler.

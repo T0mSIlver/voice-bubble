@@ -89,6 +89,6 @@ sleep 5
 shot 6-finished
 adb logcat -d -s VoiceBubble:* | grep -E "finish key|finish:" | tail -2 || true
 debug
-adb logcat -d -s VoiceBubble:* > "$OUT/voicebubble.log"
+adb logcat -d -s VoiceBubble:* | tee "$OUT/voicebubble.log" | tail -40
 adb logcat -d > "$OUT/logcat.txt"
 echo "SMOKE PASS"
