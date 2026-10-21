@@ -13,7 +13,14 @@ mkdir -p "$OUT"
 
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 debug() { adb shell am broadcast -a "$PKG.DEBUG" -p "$PKG" "$@" > /dev/null; }
-fail() { echo "SMOKE FAIL: $*" >&2; adb logcat -d > "$OUT/logcat.txt" || true; exit 1; }
+fail() {
+  echo "SMOKE FAIL: $*" >&2
+  adb logcat -d > "$OUT/logcat.txt" || true
+  echo "--- VoiceBubble log"; adb logcat -d -s VoiceBubble:* || true
+  echo "--- text fields on screen"; grep -o 'text="[^"]*"[^>]*class="android.widget.EditText"' "$OUT/ui.xml" 2>/dev/null || true
+  echo "--- focus"; adb shell dumpsys window | grep -E 'mCurrentFocus|mFocusedApp' || true
+  exit 1
+}
 
 adb install -r -g "$APK"
 adb shell appops set "$PKG" SYSTEM_ALERT_WINDOW allow
@@ -39,6 +46,8 @@ debug --ez record true
 sleep 3
 shot 2-box-with-keyboard
 echo "after bubble tap: $(imeshown)"
+sleep 2
+echo "2 s later: $(imeshown)"
 adb shell dumpsys window | grep -E 'mCurrentFocus' | head -2 | tee "$OUT/focus-typing.txt"
 adb shell input text "rambler%stext"
 sleep 2

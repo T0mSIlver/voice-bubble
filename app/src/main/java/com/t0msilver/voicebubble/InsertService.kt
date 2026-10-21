@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.Bundle
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -22,7 +23,9 @@ class InsertService : AccessibilityService() {
 
     /** True when the text went into a field. The clipboard holds the text either way. */
     fun insert(text: String): Boolean {
-        val node = focusedEditable() ?: return false
+        val node = focusedEditable()
+        Log.i(TAG, "insert: field=${node?.let { "${it.packageName}/${it.viewIdResourceName} '${it.text}' sel=${it.textSelectionStart}" }}")
+        if (node == null) return false
         val current = if (node.isShowingHintText) "" else node.text?.toString().orEmpty()
         val start = node.textSelectionStart.takeIf { it in 0..current.length } ?: current.length
         val end = node.textSelectionEnd.takeIf { it in start..current.length } ?: start
@@ -30,14 +33,23 @@ class InsertService : AccessibilityService() {
         val piece = if (start > 0 && !current[start - 1].isWhitespace()) " $text" else text
 
         copyToClipboard(this, piece)
-        if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) return true
+        node.refresh()
+        val before = node.text?.toString()
+        if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+            node.refresh()
+            Log.i(TAG, "insert: paste accepted, field now '${node.text}'")
+            // Some fields accept the action and paste nothing; fall through to set-text then.
+            if (node.text?.toString() != before) return true
+        }
 
         // Fields that refuse paste: rewrite the whole text, then put the cursor after the insert.
         val updated = current.substring(0, start) + piece + current.substring(end)
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, updated)
         }
-        if (!node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return false
+        val set = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        Log.i(TAG, "insert: set-text ${if (set) "accepted" else "refused"}")
+        if (!set) return false
         val cursor = start + piece.length
         node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cursor)
@@ -83,6 +95,7 @@ class InsertService : AccessibilityService() {
     }
 
     companion object {
+        private const val TAG = "VoiceBubble"
         private const val BOX_ID = "com.t0msilver.voicebubble:id/buffer_box"
         private val VOICE_KEY = Regex("voice|micro|dictat|rambler|vocal|speak|parler", RegexOption.IGNORE_CASE)
 
