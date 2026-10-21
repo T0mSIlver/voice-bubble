@@ -36,18 +36,15 @@ echo "ok: bubble service running"
 
 adb shell am start -W -n "$PKG/.TestTargetActivity"
 sleep 3
-imeshown() { adb shell dumpsys input_method | grep -o 'mInputShown=[a-z]*' | head -1; }
 
-# Rambler mode: a bubble tap opens the floating box with the keyboard on it. The emulator has no
-# Gboard, so typed keys stand in for Rambler; they must land in the box, not the app behind.
-debug --ez panel true
+# Rambler mode, mic tap off: a bubble tap opens the floating box with the keyboard on it. Typed
+# keys stand in for Rambler; they must land in the box, not the app behind.
+debug --ez automic false --ez panel true
 sleep 1
 debug --ez record true
 sleep 3
 shot 2-box-with-keyboard
-echo "after bubble tap: $(imeshown)"
-sleep 2
-echo "2 s later: $(imeshown)"
+adb shell dumpsys window | grep -E 'InputMethod.*(isVisible|mViewVisibility)|mInputMethodWindow' | head -3 || true
 adb shell dumpsys window | grep -E 'mCurrentFocus' | head -2 | tee "$OUT/focus-typing.txt"
 adb shell input text "rambler%stext"
 sleep 2
@@ -63,16 +60,21 @@ adb pull /sdcard/ui.xml "$OUT/ui.xml" > /dev/null
 grep -q 'text="Hello rambler text"' "$OUT/ui.xml" || fail "the app's field doesn't hold the inserted text"
 echo "ok: Insert typed the buffer into the app's focused field"
 
-# The open question: does scrolling the app behind keep the keyboard on the box? Logged, not asserted.
+# Mic tap on. This image ships Gboard; with its microphone granted (as on a phone where voice typing
+# was used once), the bubble should find and tap its voice key. Logged, not asserted: no Rambler here.
+adb shell pm grant com.google.android.inputmethod.latin android.permission.RECORD_AUDIO 2>/dev/null || echo "no Gboard on this image"
+debug --ez automic true --ez record true
+sleep 4
+shot 4-voice-typing
+adb logcat -d -s VoiceBubble:* | grep "voice key" | tail -1
+
+# The open question: does touching the app behind keep the keyboard on the box? Logged, not asserted.
 read -r W H < <(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' ')
-debug --ez record true
-sleep 3
-echo "before swipe: $(imeshown)"
-adb shell input swipe $((W / 2)) $((H * 60 / 100)) $((W / 2)) $((H * 40 / 100)) 300
+adb shell input swipe $((W / 2)) $((H * 42 / 100)) $((W / 2)) $((H * 32 / 100)) 300
 sleep 2
-shot 4-after-swipe
-echo "after swipe on the app behind: $(imeshown)"
-adb shell dumpsys window | grep -E 'mCurrentFocus' | head -2 | tee "$OUT/focus-after-swipe.txt"
+shot 5-after-swipe
+adb logcat -d -s VoiceBubble:* | grep "panel window focus" | tail -2
+adb shell dumpsys window | grep -E 'mCurrentFocus' | head -1 | tee "$OUT/focus-after-swipe.txt"
 debug
 adb logcat -d -s VoiceBubble:* > "$OUT/voicebubble.log"
 adb logcat -d > "$OUT/logcat.txt"
