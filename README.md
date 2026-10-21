@@ -19,11 +19,13 @@ standard Android recognizer instead of Rambler (no clean-up of ums and restarts)
 
 1. On the phone, open the repo's **Releases** page, download `voice-bubble-debug.apk` from the
    latest build, and open it. Allow your browser to install unknown apps when Android asks.
-2. Open Voice Bubble and allow, in order: microphone, notifications, display over other apps.
-3. Turn on **Voice Bubble** under Settings → Accessibility → Downloaded apps. It taps Gboard's mic
-   and inserts into other apps. Android 13+ blocks this for sideloaded apps at first: if the
-   switch is greyed out, open Settings → Apps → Voice Bubble → ⋮ → **Allow restricted settings**,
-   then try again. Without it, you tap Gboard's mic yourself and Insert copies instead.
+2. Android 15+ blocks "display over other apps" and Accessibility for apps installed from a
+   browser. Unblock both once: Settings → Accessibility → tap the greyed **Voice Bubble** entry
+   and dismiss the "Restricted setting" dialog; then Settings → Apps → Voice Bubble → ⋮ →
+   **Allow restricted settings**. The ⋮ entry only appears after that blocked attempt.
+3. Open Voice Bubble and allow, in order: microphone, notifications, display over other apps,
+   and Accessibility (it taps Gboard's mic and inserts into other apps; without it, you tap
+   Gboard's mic yourself and Insert copies instead).
 4. **Turn the bubble on**.
 
 ## Use
