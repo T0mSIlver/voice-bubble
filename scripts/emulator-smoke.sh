@@ -66,14 +66,14 @@ adb shell pm grant com.google.android.inputmethod.latin android.permission.RECOR
 debug --ez automic true --ez record true
 sleep 4
 shot 4-voice-typing
-adb logcat -d -s VoiceBubble:* | grep "voice key" | tail -1
+adb logcat -d -s VoiceBubble:* | grep "voice key" | tail -1 || echo "voice key: no attempt logged"
 
 # The open question: does touching the app behind keep the keyboard on the box? Logged, not asserted.
 read -r W H < <(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' ')
 adb shell input swipe $((W / 2)) $((H * 42 / 100)) $((W / 2)) $((H * 32 / 100)) 300
 sleep 2
 shot 5-after-swipe
-adb logcat -d -s VoiceBubble:* | grep "panel window focus" | tail -2
+adb logcat -d -s VoiceBubble:* | grep "panel window focus" | tail -2 || true
 adb shell dumpsys window | grep -E 'mCurrentFocus' | head -1 | tee "$OUT/focus-after-swipe.txt"
 debug
 adb logcat -d -s VoiceBubble:* > "$OUT/voicebubble.log"
