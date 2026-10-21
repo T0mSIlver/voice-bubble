@@ -73,7 +73,7 @@ echo "ok: the second tap inserted the text into the app's field"
 # was used once), the bubble should find and tap its voice key, and on the second tap a finish key.
 # Logged, not asserted: no Rambler here.
 adb shell pm grant com.google.android.inputmethod.latin android.permission.RECORD_AUDIO 2>/dev/null || echo "no Gboard on this image"
-debug --ez automic true --ez record true
+debug --ez automic true --ez floatkb true --ez record true
 sleep 4
 shot 4-voice-typing
 adb logcat -d -s VoiceBubble:* | grep "voice key" | tail -1 || echo "voice key: no attempt logged"
