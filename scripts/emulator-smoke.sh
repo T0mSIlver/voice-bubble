@@ -88,6 +88,28 @@ debug --ez record true
 sleep 5
 shot 6-finished
 adb logcat -d -s VoiceBubble:* | grep -E "finish key|finish:" | tail -2 || true
+
+# Probe, logged only: Gboard's floating-mode controls, for making the keyboard small while Rambler listens.
+debug --ez automic false
+debug --ez record true
+sleep 3
+debug --es tapkey "features menu"
+sleep 2
+shot 7-features-menu
+debug --es tapkey "floating"
+sleep 2
+shot 8-floating
+debug --es tapkey "features menu"
+sleep 2
+shot 9-features-again
+debug --es tapkey "zzz-scan-only"
+debug --es tapkey "dock|floating"
+sleep 2
+shot 10-docked
+debug --es tapkey "zzz-scan-only"
+debug --ez record true
+sleep 2
+adb logcat -d -s VoiceBubble:* | grep -E "tapkey|scan:" || true
 debug
 adb logcat -d -s VoiceBubble:* | tee "$OUT/voicebubble.log" | tail -40
 adb logcat -d > "$OUT/logcat.txt"
