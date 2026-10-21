@@ -148,14 +148,14 @@ class MainActivity : Activity() {
 
     private fun step(label: String, done: () -> Boolean, fix: () -> Unit) {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        val text = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f) }
+        val labelView = TextView(this).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f) }
         val button = Button(this).apply { text = "Allow"; setOnClickListener { fix() } }
-        row.addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        row.addView(labelView, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         row.addView(button)
         root.addView(row)
         steps += {
             val ok = done()
-            text.text = (if (ok) "✓ " else "○ ") + label
+            labelView.text = (if (ok) "✓ " else "○ ") + label
             button.visibility = if (ok) View.GONE else View.VISIBLE
         }
     }
