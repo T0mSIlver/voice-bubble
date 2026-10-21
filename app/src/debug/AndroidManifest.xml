@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: hooks for scripts/emulator-smoke.sh, which has no microphone to speak into. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name=".DebugReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.t0msilver.voicebubble.DEBUG" />
+            </intent-filter>
+        </receiver>
+        <activity
+            android:name=".TestTargetActivity"
+            android:exported="true"
+            android:windowSoftInputMode="stateVisible" />
+    </application>
+</manifest>

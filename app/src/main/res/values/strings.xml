@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Voice Bubble</string>
+    <string name="insert_service_description">Lets Voice Bubble type your dictated text into the field you are editing, in any app. It reads only the focused text field, and only when you tap Insert.</string>
+</resources>
