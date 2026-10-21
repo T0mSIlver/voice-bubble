@@ -454,7 +454,6 @@ class BubbleService : LifecycleService() {
 
         panel.addView(statusView)
         panel.addView(box)
-        }
         panel.addView(row)
         panelParams = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT).apply {
             // At the top, so it never sits on the keyboard of the field it types into.
