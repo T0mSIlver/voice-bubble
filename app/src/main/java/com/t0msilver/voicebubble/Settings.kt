@@ -6,11 +6,11 @@ import java.util.Locale
 enum class Mode(val title: String, val detail: String) {
     RAMBLER(
         "Rambler (Gboard)",
-        "The bubble opens a small text box and taps Gboard's mic for you, so Rambler types into it. Gboard stays on screen while it listens.",
+        "The bubble opens Gboard and taps its mic for you; the second tap finishes Rambler and inserts the text. Gboard is on screen while Rambler listens: that's the only way in to Rambler.",
     ),
     SCROLL(
         "Keep scrolling (Android recognizer)",
-        "No keyboard on screen, so you can scroll other apps while you talk. Google's standard recognizer, not Rambler: no clean-up of ums or restarts.",
+        "No keyboard on screen. Google's standard Android recognizer, not Rambler: no clean-up of ums or restarts.",
     ),
 }
 

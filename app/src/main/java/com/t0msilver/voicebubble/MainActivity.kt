@@ -41,7 +41,7 @@ class MainActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(root); fitsSystemWindows = true })
 
         heading("Voice Bubble")
-        para("A floating mic over any app. Tap it and Gboard's Rambler types into a small floating box instead of the app; then Insert puts the text into the field you're editing, or Copy takes it.")
+        para("A floating mic over any app. Tap it and Gboard's Rambler starts listening; tap it again and the text goes into the field you were typing in.")
 
         section("1. Permissions")
         step("Microphone", { has(Manifest.permission.RECORD_AUDIO) }) {
@@ -75,7 +75,7 @@ class MainActivity : Activity() {
         }
         root.addView(group)
         root.addView(CheckBox(this).apply {
-            text = "Rambler mode: tap Gboard's mic for me (needs Accessibility)"
+            text = "Rambler mode: tap Gboard's mic and finish keys for me (needs Accessibility)"
             isChecked = settings.autoMic
             setOnCheckedChangeListener { _, on -> settings.autoMic = on }
         })
@@ -105,7 +105,18 @@ class MainActivity : Activity() {
             }
         }
         root.addView(bubbleButton)
-        para("Tap: start or stop dictating (in Rambler mode, tap the bubble again to finish). Long-press: show or hide the text panel. Drag: move it. Turn it off from here or from its notification.")
+        para("Tap: start dictating. Tap again: stop, and the text goes into the field you were typing in. Long-press: insert the last dictation again. Drag: move it. Turn it off from here or from its notification.")
+
+        section("If the second tap doesn't insert")
+        para("The bubble looks for Rambler's finish key by its label. This shows what it saw on Gboard last time; copy it and send it to me.")
+        val scan = para("")
+        root.addView(Button(this).apply {
+            text = "Refresh and copy"
+            setOnClickListener {
+                scan.text = InsertService.lastScan.ifEmpty { "No keyboard scan yet: dictate once first." }
+                if (InsertService.lastScan.isNotEmpty()) copyToClipboard(this@MainActivity, InsertService.lastScan)
+            }
+        })
 
         if (intent?.getBooleanExtra(EXTRA_START_BUBBLE, false) == true) startBubble()
     }

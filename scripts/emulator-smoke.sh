@@ -47,47 +47,48 @@ echo "ok: accessibility service connected"
 adb shell am start -W -n "$PKG/.TestTargetActivity"
 sleep 3
 
-# Rambler mode, mic tap off: a bubble tap opens the floating box with the keyboard on it. Typed
-# keys stand in for Rambler; they must land in the box, not the app behind.
-debug --ez automic false --ez panel true
-sleep 1
+# Rambler mode, mic tap off: the first bubble tap opens Gboard on the invisible field; typed keys
+# stand in for Rambler. The second tap must put them into the app's field, with nothing else to do.
+debug --ez automic false
 debug --ez record true
 sleep 3
-shot 2-box-with-keyboard
-adb shell dumpsys window | grep -E 'InputMethod.*(isVisible|mViewVisibility)|mInputMethodWindow' | head -3 || true
-adb shell dumpsys window | grep -E 'mCurrentFocus' | head -2 | tee "$OUT/focus-typing.txt"
+shot 2-first-tap
+adb shell dumpsys window | grep -E 'mCurrentFocus' | head -1 | tee "$OUT/focus-typing.txt"
 adb shell input text "rambler%stext"
 sleep 2
 debug
-adb logcat -d -s VoiceBubble:* | grep -q "buffer='rambler text'" || fail "typed text didn't reach the box's buffer"
-echo "ok: keys typed while the box is open land in the buffer"
+adb logcat -d -s VoiceBubble:* | grep -q "buffer='rambler text'" || fail "typed text didn't reach the buffer"
+echo "ok: keys typed after the first tap land in the buffer"
 
-debug --ez insert true
-sleep 3
-shot 3-inserted
+debug --ez record true
+sleep 4
+shot 3-second-tap
 adb shell uiautomator dump /sdcard/ui.xml > /dev/null
 adb pull /sdcard/ui.xml "$OUT/ui.xml" > /dev/null
-grep -q 'text="Hello rambler text"' "$OUT/ui.xml" || fail "the app's field doesn't hold the inserted text"
-echo "ok: Insert typed the buffer into the app's focused field"
+grep -q 'text="Hello rambler text"' "$OUT/ui.xml" || fail "the second tap didn't insert into the app's field"
+adb shell dumpsys window | grep -E 'mInputMethodWindow|InputMethod' | grep -i 'isVisible=true\|mViewVisibility=0x0' | head -2 || true
+echo "ok: the second tap inserted the text into the app's field"
 
 # Mic tap on. This image ships Gboard; with its microphone granted (as on a phone where voice typing
-# was used once), the bubble should find and tap its voice key. Logged, not asserted: no Rambler here.
+# was used once), the bubble should find and tap its voice key, and on the second tap a finish key.
+# Logged, not asserted: no Rambler here.
 adb shell pm grant com.google.android.inputmethod.latin android.permission.RECORD_AUDIO 2>/dev/null || echo "no Gboard on this image"
 debug --ez automic true --ez record true
 sleep 4
 shot 4-voice-typing
 adb logcat -d -s VoiceBubble:* | grep "voice key" | tail -1 || echo "voice key: no attempt logged"
 
-# The open question: does touching the app behind keep the keyboard on the box? Logged, not asserted.
+# Does touching the app behind keep Gboard on the field? Logged, not asserted.
 read -r W H < <(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' ')
 adb shell input swipe $((W / 2)) $((H * 42 / 100)) $((W / 2)) $((H * 32 / 100)) 300
 sleep 2
 shot 5-after-swipe
-adb logcat -d -s VoiceBubble:* | grep "panel window focus" | tail -2 || true
-adb shell dumpsys window | grep -E 'mCurrentFocus' | head -1 | tee "$OUT/focus-after-swipe.txt"
+adb logcat -d -s VoiceBubble:* | grep "ghost focus" | tail -2 || true
+debug --ez record true
+sleep 5
+shot 6-finished
+adb logcat -d -s VoiceBubble:* | grep -E "finish key|finish:" | tail -2 || true
 debug
 adb logcat -d -s VoiceBubble:* > "$OUT/voicebubble.log"
 adb logcat -d > "$OUT/logcat.txt"
-cat "$OUT/voicebubble.log"
-grep -q "accessibility=true" "$OUT/voicebubble.log" || fail "accessibility service never connected"
 echo "SMOKE PASS"

@@ -59,27 +59,29 @@ class InsertService : AccessibilityService() {
     }
 
     /**
-     * Taps the keyboard's voice key (Gboard's mic, which starts Rambler when it's on). Gboard exposes
-     * its keys to accessibility for TalkBack; the key is found by its label, in English or French.
-     * Returns what it saw, for the log, or null when there was no keyboard window yet.
+     * Taps a key on the keyboard (Gboard exposes its keys to accessibility for TalkBack), found by
+     * its label. Returns what it did, for the log, or null when there's no keyboard window yet.
+     * The labels it saw are kept in [lastScan] so the setup screen can show them.
      */
-    fun tapVoiceKey(): String? {
+    fun tapKey(pattern: Regex): String? {
         val ime = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } ?: return null
         val root = ime.root ?: return "keyboard window has no nodes"
         val seen = mutableListOf<String>()
         val queue = ArrayDeque(listOf(root))
-        while (queue.isNotEmpty()) {
+        var tapped: String? = null
+        while (queue.isNotEmpty() && tapped == null) {
             val n = queue.removeFirst()
             val label = listOfNotNull(n.contentDescription, n.text, n.viewIdResourceName).joinToString(" | ")
             if (label.isNotBlank()) seen += label
-            if (VOICE_KEY.containsMatchIn(label)) {
+            if (pattern.containsMatchIn(label)) {
                 var target: AccessibilityNodeInfo? = n
                 while (target != null && !target.isClickable) target = target.parent
-                if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return "tapped '$label'"
+                if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) tapped = label
             }
             for (i in 0 until n.childCount) n.getChild(i)?.let(queue::add)
         }
-        return "no voice key among ${seen.size} labels: ${seen.take(40).joinToString("; ")}"
+        lastScan = "pattern ${pattern.pattern}: ${tapped?.let { "tapped '$it'" } ?: "no match"}\n" + seen.joinToString("\n")
+        return tapped?.let { "tapped '$it'" } ?: "no key among ${seen.size} labels: ${seen.take(40).joinToString("; ")}"
     }
 
     /** The field Tom was editing in the app underneath; never Voice Bubble's own box. */
@@ -97,7 +99,13 @@ class InsertService : AccessibilityService() {
     companion object {
         private const val TAG = "VoiceBubble"
         private const val BOX_ID = "com.t0msilver.voicebubble:id/buffer_box"
-        private val VOICE_KEY = Regex("voice|micro|dictat|rambler|vocal|speak|parler", RegexOption.IGNORE_CASE)
+        val VOICE_KEY = Regex("voice|micro|dictat|rambler|vocal|speak|parler", RegexOption.IGNORE_CASE)
+        /** Rambler's finish key; the label isn't documented, so English and French guesses. */
+        val FINISH_KEY = Regex("\\b(done|finish|finished|stop|insert|terminé|terminer|arrêter|insérer|valider)\\b", RegexOption.IGNORE_CASE)
+
+        /** The labels the last key search saw, for the setup screen's diagnostics. */
+        @Volatile var lastScan: String = ""
+            private set
 
         @Volatile var instance: InsertService? = null
             private set
