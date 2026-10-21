@@ -79,6 +79,12 @@ class MainActivity : Activity() {
             isChecked = settings.autoMic
             setOnCheckedChangeListener { _, on -> settings.autoMic = on }
         })
+        root.addView(CheckBox(this).apply {
+            text = "Rambler mode: make Gboard float while you ramble, then put it back"
+            isChecked = settings.floatKeyboard
+            setOnCheckedChangeListener { _, on -> settings.floatKeyboard = on }
+        })
+        para("Floating Gboard stays where you last left it: drag it small into a corner once.")
         para("Language for Keep scrolling mode:")
         val labels = Settings.LANGUAGES.map { it.second }
         root.addView(Spinner(this).apply {

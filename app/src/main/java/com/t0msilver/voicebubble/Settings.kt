@@ -26,6 +26,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("auto_mic", true)
         set(v) = prefs.edit().putBoolean("auto_mic", v).apply()
 
+    /** Rambler mode: switch Gboard to floating while the bubble listens, and back after. */
+    var floatKeyboard: Boolean
+        get() = prefs.getBoolean("float_keyboard", true)
+        set(v) = prefs.edit().putBoolean("float_keyboard", v).apply()
+
     /** Scroll mode's language, a BCP 47 tag; empty means the phone's language. */
     var languageTag: String
         get() = prefs.getString("language", "").orEmpty()

@@ -144,6 +144,7 @@ class BubbleService : LifecycleService() {
     private var ghostAdded = false
     private var finishing = false
     private var micTapped = false
+    private var floated = false
 
     private fun buildGhost() {
         ghost = EditText(this).apply {
@@ -186,7 +187,7 @@ class BubbleService : LifecycleService() {
         if (tapMic) tapMicWhenKeyboardIsUp(System.currentTimeMillis())
     }
 
-    /** Polls for the keyboard window, then taps its voice key once. */
+    /** Waits for the keyboard window, floats it if asked, then taps its voice key once. */
     private fun tapMicWhenKeyboardIsUp(since: Long) {
         ghost.postDelayed({
             if (!typing) return@postDelayed
@@ -195,18 +196,54 @@ class BubbleService : LifecycleService() {
                 toast("Tap Gboard's mic (turn on Accessibility and the bubble does it)")
                 return@postDelayed
             }
-            val result = svc.tapKey(InsertService.VOICE_KEY)
+            val labels = svc.keyLabels()
             when {
-                result == null && System.currentTimeMillis() - since < 3000 -> tapMicWhenKeyboardIsUp(since)
-                result == null -> toast("Gboard didn't open")
-                result.startsWith("tapped") -> {
-                    micTapped = true
-                    DictationBuffer.setStatus("Rambler is listening")
-                }
-                else -> toast("Couldn't find Gboard's mic; tap it yourself")
+                labels.isNullOrEmpty() && System.currentTimeMillis() - since < 3000 -> tapMicWhenKeyboardIsUp(since)
+                labels.isNullOrEmpty() -> toast("Gboard didn't open")
+                settings.floatKeyboard && labels.none(InsertService.FLOATING_NOW::containsMatchIn) ->
+                    toggleFloating { ok ->
+                        floated = ok
+                        Log.i(TAG, "float keyboard: $ok")
+                        tapMic()
+                    }
+                else -> tapMic()
             }
-            Log.i(TAG, "voice key: $result")
         }, 250)
+    }
+
+    private fun tapMic() {
+        if (!typing) return
+        val result = InsertService.instance?.tapKey(InsertService.VOICE_KEY)
+        if (result?.startsWith("tapped") == true) {
+            micTapped = true
+            DictationBuffer.setStatus("Rambler is listening")
+        } else {
+            toast("Couldn't find Gboard's mic; tap it yourself")
+        }
+        Log.i(TAG, "voice key: $result")
+    }
+
+    /** Gboard's features menu, then its "Floating mode" entry, which turns floating on or off. */
+    private fun toggleFloating(done: (Boolean) -> Unit) {
+        tapWhenShown(InsertService.FEATURES_MENU, System.currentTimeMillis()) { menu ->
+            if (menu == null) done(false)
+            else tapWhenShown(InsertService.FLOAT_TOGGLE, System.currentTimeMillis()) { done(it != null) }
+        }
+    }
+
+    /** Taps the key matching [pattern] as soon as it shows; gives null after 1.5 s without it. */
+    private fun tapWhenShown(pattern: Regex, since: Long, done: (String?) -> Unit) {
+        bubble.postDelayed({
+            val result = InsertService.instance?.tapKey(pattern)
+            when {
+                result?.startsWith("tapped") == true -> done(result)
+                System.currentTimeMillis() - since < 1500 -> tapWhenShown(pattern, since, done)
+                else -> {
+                    Log.i(TAG, "no key for ${pattern.pattern}: $result")
+                    done(null)
+                }
+            }
+        }, 200)
     }
 
     private fun finishAndInsert() {
@@ -233,14 +270,27 @@ class BubbleService : LifecycleService() {
             val settled = text != before && now - changedAt >= 600
             if (settled || now - start >= limit) {
                 Log.i(TAG, "finish: '${text.take(80)}' after ${now - start} ms")
-                endTyping()
-                finishing = false
-                // Let the app underneath get its focus back before typing into it.
-                bubble.postDelayed({ insertBuffer() }, 350)
+                dockIfFloated {
+                    endTyping()
+                    finishing = false
+                    // Let the app underneath get its focus back before typing into it.
+                    bubble.postDelayed({ insertBuffer() }, 350)
+                }
             } else {
                 waitForText(before, start, limit, text, changedAt)
             }
         }, 150)
+    }
+
+    /** Puts Gboard back the way it was, if the first tap floated it. */
+    private fun dockIfFloated(then: () -> Unit) {
+        if (!floated) return then()
+        floated = false
+        toggleFloating { ok ->
+            Log.i(TAG, "dock keyboard: $ok")
+            if (!ok) toast("Couldn't put Gboard back: turn Floating off in Gboard's menu")
+            then()
+        }
     }
 
     private fun endTyping() {

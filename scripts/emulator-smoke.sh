@@ -49,7 +49,7 @@ sleep 3
 
 # Rambler mode, mic tap off: the first bubble tap opens Gboard on the invisible field; typed keys
 # stand in for Rambler. The second tap must put them into the app's field, with nothing else to do.
-debug --ez automic false
+debug --ez automic false --ez floatkb false
 debug --ez record true
 sleep 3
 shot 2-first-tap
@@ -89,27 +89,21 @@ sleep 5
 shot 6-finished
 adb logcat -d -s VoiceBubble:* | grep -E "finish key|finish:" | tail -2 || true
 
-# Probe, logged only: Gboard's floating-mode controls, for making the keyboard small while Rambler listens.
-debug --ez automic false
-debug --ez record true
+# The first tap floated Gboard and the second put it back: tap the app's field and check Gboard is docked.
+for _ in 1 2 3 4 5; do adb logcat -d -s VoiceBubble:* | grep -q "dock keyboard:" && break; sleep 2; done
+adb logcat -d -s VoiceBubble:* | grep -E "float keyboard|dock keyboard|no key for" || true
+adb logcat -d -s VoiceBubble:* | grep -q "float keyboard: true" || fail "the first tap didn't float Gboard"
+adb logcat -d -s VoiceBubble:* | grep -q "dock keyboard: true" || fail "the second tap didn't put Gboard back"
+read -r X1 Y1 X2 Y2 < <(grep -o 'test_field[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' "$OUT/ui.xml" | grep -o '[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*' | tr ',][' '   ')
+adb shell input tap $(((X1 + X2) / 2)) $(((Y1 + Y2) / 2))
 sleep 3
-debug --es tapkey "features.menu"
-sleep 2
-shot 7-features-menu
-debug --es tapkey "floating"
-sleep 2
-shot 8-floating
-debug --es tapkey "features.menu"
-sleep 2
-shot 9-features-again
-debug --es tapkey "zzz-scan-only"
-debug --es tapkey "'dock|floating'"
-sleep 2
-shot 10-docked
-debug --es tapkey "zzz-scan-only"
-debug --ez record true
-sleep 2
-adb logcat -d -s VoiceBubble:* | grep -E "tapkey|scan:" || true
+shot 7-docked
+debug --es tapkey zzz-scan-only
+adb logcat -d -s VoiceBubble:* | grep "tapkey zzz" | tail -1
+adb logcat -d -s VoiceBubble:* | grep "tapkey zzz" | tail -1 | grep -q "Use voice typing" || fail "no keyboard on the app's field"
+adb logcat -d -s VoiceBubble:* | grep "tapkey zzz" | tail -1 | grep -q "Move keyboard position" && fail "Gboard is still floating"
+echo "ok: Gboard floated while listening and is docked again"
+
 debug
 adb logcat -d -s VoiceBubble:* | tee "$OUT/voicebubble.log" | tail -40
 adb logcat -d > "$OUT/logcat.txt"

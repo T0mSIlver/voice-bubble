@@ -58,6 +58,21 @@ class InsertService : AccessibilityService() {
         return true
     }
 
+    /** The labels of the keyboard's keys, or null when there's no keyboard window. */
+    fun keyLabels(): List<String>? {
+        val ime = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } ?: return null
+        val root = ime.root ?: return emptyList()
+        val seen = mutableListOf<String>()
+        val queue = ArrayDeque(listOf(root))
+        while (queue.isNotEmpty()) {
+            val n = queue.removeFirst()
+            val label = listOfNotNull(n.contentDescription, n.text, n.viewIdResourceName).joinToString(" | ")
+            if (label.isNotBlank()) seen += label
+            for (i in 0 until n.childCount) n.getChild(i)?.let(queue::add)
+        }
+        return seen
+    }
+
     /**
      * Taps a key on the keyboard (Gboard exposes its keys to accessibility for TalkBack), found by
      * its label. Returns what it did, for the log, or null when there's no keyboard window yet.
@@ -104,6 +119,10 @@ class InsertService : AccessibilityService() {
         val FINISH_KEY = Regex("\\b(done|finish|finished|stop|insert|terminé|terminer|arrêter|insérer|valider)\\b", RegexOption.IGNORE_CASE)
 
         /** The labels the last key search saw, for the setup screen's diagnostics. */
+        // Gboard's features menu, its "Floating mode" entry (a toggle), and the handle a floating keyboard shows.
+        val FEATURES_MENU = Regex("features menu|menu des fonctionnalit", RegexOption.IGNORE_CASE)
+        val FLOAT_TOGGLE = Regex("floating|flottant|dock|ancr", RegexOption.IGNORE_CASE)
+        val FLOATING_NOW = Regex("move keyboard|déplacer le clavier", RegexOption.IGNORE_CASE)
         @Volatile var lastScan: String = ""
             private set
 
