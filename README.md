@@ -9,8 +9,9 @@ The first tap focuses an invisible one-pixel text field, Gboard opens on it, and
 service taps Gboard's mic key. The second tap presses Rambler's finish key, waits for the text,
 closes the keyboard and pastes the text into the field of the app underneath.
 
-The catch: while Rambler listens, Gboard is on screen. Switch Gboard to its floating mode
-(Gboard toolbar → ⋮ → Floating) and shrink it into a corner; the rest of the screen stays usable.
+The catch: while Rambler listens, Gboard is on screen. So the first tap also switches Gboard to
+its floating mode, and the second tap puts it back, so typing in other apps is unchanged. Floating
+Gboard opens where you last left it: drag it small into a corner once. (A setting turns this off.)
 
 There is also a **Keep scrolling** mode with no keyboard at all: Google's standard Android
 recognizer instead of Rambler (no clean-up of ums and restarts).
@@ -59,6 +60,8 @@ Rambler, and has no voice):
   became "Hello rambler text") through the accessibility service's paste.
 - With Gboard's microphone allowed, the bubble finds Gboard's "Use voice typing" key.
 - A swipe on the app behind left the focus on the invisible field.
+- The first tap switches Gboard to floating mode; after the second tap, Gboard opens docked again
+  on the app's field.
 
 Not verified anywhere: Rambler itself, the label of its finish key (the bubble matches done,
 finish, stop, insert and their French forms), and whether Rambler keeps listening while you scroll a
