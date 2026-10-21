@@ -93,17 +93,17 @@ adb logcat -d -s VoiceBubble:* | grep -E "finish key|finish:" | tail -2 || true
 debug --ez automic false
 debug --ez record true
 sleep 3
-debug --es tapkey "features menu"
+debug --es tapkey "features.menu"
 sleep 2
 shot 7-features-menu
 debug --es tapkey "floating"
 sleep 2
 shot 8-floating
-debug --es tapkey "features menu"
+debug --es tapkey "features.menu"
 sleep 2
 shot 9-features-again
 debug --es tapkey "zzz-scan-only"
-debug --es tapkey "dock|floating"
+debug --es tapkey "'dock|floating'"
 sleep 2
 shot 10-docked
 debug --es tapkey "zzz-scan-only"
