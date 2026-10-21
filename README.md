@@ -44,8 +44,16 @@ The debug key is in the repo on purpose so every build installs over the last.
 
 ## What's verified
 
-On the emulator (no Gboard there, so typed keys stand in for Rambler): the bubble service starts,
-a bubble tap opens the box with the keyboard on it, keys land in the box, and Insert types the text
-into another app's field. The smoke log also records what a swipe on the app behind does to the
-keyboard. Not verified anywhere: Gboard's mic key being found and tapped, and Rambler itself; they
-need a Pixel with Rambler.
+CI runs `scripts/emulator-smoke.sh` on an API 36 Google APIs emulator, which ships Gboard (but not
+Rambler, and has no voice):
+
+- The bubble service starts; a bubble tap opens the box and gives it the focus; keys typed then land
+  in the box, not the app behind.
+- Insert puts the box's text at the cursor of another activity's field ("Hello" became
+  "Hello rambler text"), through the accessibility service's paste.
+- With Gboard's microphone allowed, the bubble finds Gboard's "Use voice typing" key and taps it.
+- A swipe on the app behind, with voice typing open, left the focus on the box.
+
+Not verified anywhere: Rambler itself, and whether Gboard keeps listening while you scroll a real
+app. That needs a Pixel with Rambler. On first use Gboard may ask for the microphone, and that
+dialog takes the focus from the box: allow it once, then tap the bubble again.
