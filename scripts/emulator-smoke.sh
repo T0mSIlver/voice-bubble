@@ -34,6 +34,16 @@ shot 1-setup
 adb shell dumpsys activity services "$PKG" | grep -q "BubbleService" || fail "BubbleService is not running"
 echo "ok: bubble service running"
 
+# The accessibility service binds a while after the setting is written; wait for it.
+for i in $(seq 30); do
+  debug
+  adb logcat -d -s VoiceBubble:* | grep -q "accessibility=true" && break
+  [ "$i" = 15 ] && adb shell settings put secure enabled_accessibility_services "$PKG/$PKG.InsertService"
+  sleep 2
+done
+adb logcat -d -s VoiceBubble:* | grep -q "accessibility=true" || fail "accessibility service never connected"
+echo "ok: accessibility service connected"
+
 adb shell am start -W -n "$PKG/.TestTargetActivity"
 sleep 3
 
