@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 
 /** Types the buffer into the focused text field of whatever app is on screen. */
 class InsertService : AccessibilityService() {
@@ -45,16 +46,46 @@ class InsertService : AccessibilityService() {
         return true
     }
 
-    /** The bubble's windows never take focus, so the field Tom was typing in keeps it. */
+    /**
+     * Taps the keyboard's voice key (Gboard's mic, which starts Rambler when it's on). Gboard exposes
+     * its keys to accessibility for TalkBack; the key is found by its label, in English or French.
+     * Returns what it saw, for the log, or null when there was no keyboard window yet.
+     */
+    fun tapVoiceKey(): String? {
+        val ime = windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD } ?: return null
+        val root = ime.root ?: return "keyboard window has no nodes"
+        val seen = mutableListOf<String>()
+        val queue = ArrayDeque(listOf(root))
+        while (queue.isNotEmpty()) {
+            val n = queue.removeFirst()
+            val label = listOfNotNull(n.contentDescription, n.text, n.viewIdResourceName).joinToString(" | ")
+            if (label.isNotBlank()) seen += label
+            if (VOICE_KEY.containsMatchIn(label)) {
+                var target: AccessibilityNodeInfo? = n
+                while (target != null && !target.isClickable) target = target.parent
+                if (target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true) return "tapped '$label'"
+            }
+            for (i in 0 until n.childCount) n.getChild(i)?.let(queue::add)
+        }
+        return "no voice key among ${seen.size} labels: ${seen.take(40).joinToString("; ")}"
+    }
+
+    /** The field Tom was editing in the app underneath; never Voice Bubble's own box. */
     private fun focusedEditable(): AccessibilityNodeInfo? {
-        rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { return it }
+        rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            ?.takeIf { it.isEditable && it.viewIdResourceName != BOX_ID }?.let { return it }
         for (w in windows) {
-            w.root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }?.let { return it }
+            if (w.type != AccessibilityWindowInfo.TYPE_APPLICATION) continue
+            w.root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                ?.takeIf { it.isEditable && it.viewIdResourceName != BOX_ID }?.let { return it }
         }
         return null
     }
 
     companion object {
+        private const val BOX_ID = "com.t0msilver.voicebubble:id/buffer_box"
+        private val VOICE_KEY = Regex("voice|micro|dictat|rambler|vocal|speak|parler", RegexOption.IGNORE_CASE)
+
         @Volatile var instance: InsertService? = null
             private set
     }

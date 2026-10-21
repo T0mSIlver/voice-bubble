@@ -41,5 +41,4 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.service)
     implementation(libs.coroutines.android)
-    implementation(libs.mlkit.speech)
 }

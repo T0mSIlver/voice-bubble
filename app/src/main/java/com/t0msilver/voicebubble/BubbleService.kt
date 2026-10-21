@@ -15,11 +15,14 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.Editable
+import android.text.InputType
 import android.text.SpannableStringBuilder
+import android.text.TextWatcher
 import android.text.Spanned
-import android.text.method.ScrollingMovementMethod
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -27,7 +30,9 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -40,8 +45,9 @@ import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
 /**
- * Owns the floating bubble and the buffer panel. Both windows are not focusable, so the app
- * underneath keeps its focused field and Tom can keep scrolling it while he dictates.
+ * Owns the floating bubble and the text panel. In Rambler mode a bubble tap makes the panel's box
+ * focusable, so Gboard opens on it and Rambler types into it; otherwise both windows stay
+ * unfocusable, so the app underneath keeps its focused field and Tom can keep scrolling it.
  */
 class BubbleService : LifecycleService() {
     private lateinit var wm: WindowManager
@@ -54,12 +60,14 @@ class BubbleService : LifecycleService() {
 
     private lateinit var panel: LinearLayout
     private lateinit var panelParams: WindowManager.LayoutParams
-    private lateinit var bufferView: TextView
+    private lateinit var box: EditText
     private lateinit var statusView: TextView
     private var panelShown = false
 
     private var recognizer: Recognizer? = null
     private var insertWhenStopped = false
+    /** Rambler mode: the box has the keyboard. */
+    private var typing = false
     private var running = false
 
     override fun onCreate() {
@@ -110,8 +118,67 @@ class BubbleService : LifecycleService() {
 
     // --- recording ---
 
+    /** What a bubble tap does. */
     fun toggleRecording() {
-        if (recognizer != null) stopRecording() else startRecording()
+        when {
+            typing -> endTyping()
+            recognizer != null -> stopRecording()
+            settings.mode == Mode.RAMBLER -> beginTyping(tapMic = settings.autoMic)
+            else -> startRecording()
+        }
+    }
+
+    // --- Rambler mode ---
+
+    private fun beginTyping(tapMic: Boolean) {
+        if (!panelShown) togglePanel()
+        typing = true
+        panelParams.flags = panelParams.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv() or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        wm.updateViewLayout(panel, panelParams)
+        box.setText(DictationBuffer.text.value)
+        box.isFocusableInTouchMode = true
+        box.requestFocus()
+        box.setSelection(box.length())
+        DictationBuffer.setRecording(true)
+        DictationBuffer.setStatus(if (tapMic) "Opening Gboard's mic…" else "Typing into the box")
+        box.postDelayed({
+            if (typing) getSystemService(InputMethodManager::class.java).showSoftInput(box, 0)
+        }, 120)
+        if (tapMic) tapMicWhenKeyboardIsUp(System.currentTimeMillis())
+    }
+
+    /** Polls for the keyboard window, then taps its voice key once. */
+    private fun tapMicWhenKeyboardIsUp(since: Long) {
+        box.postDelayed({
+            if (!typing) return@postDelayed
+            val svc = InsertService.instance
+            if (svc == null) {
+                DictationBuffer.setStatus("Tap Gboard's mic (turn on Accessibility and the bubble does it)")
+                return@postDelayed
+            }
+            val result = svc.tapVoiceKey()
+            when {
+                result == null && System.currentTimeMillis() - since < 3000 -> tapMicWhenKeyboardIsUp(since)
+                result == null -> DictationBuffer.setStatus("The keyboard didn't open; tap the box")
+                result.startsWith("tapped") -> DictationBuffer.setStatus("Rambler is listening · tap the bubble when done")
+                else -> DictationBuffer.setStatus("Couldn't find Gboard's mic; tap it yourself")
+            }
+            Log.i(TAG, "voice key: $result")
+        }, 250)
+    }
+
+    private fun endTyping() {
+        if (!typing) return
+        typing = false
+        DictationBuffer.setText(box.text.toString())
+        getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(box.windowToken, 0)
+        box.clearFocus()
+        panelParams.flags = panelParams.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        if (panelShown) wm.updateViewLayout(panel, panelParams)
+        DictationBuffer.setRecording(false)
+        DictationBuffer.setStatus("")
+        render(DictationBuffer.text.value, "")
     }
 
     private fun startRecording() {
@@ -121,7 +188,7 @@ class BubbleService : LifecycleService() {
         }
         DictationBuffer.setRecording(true)
         DictationBuffer.setStatus("Starting…")
-        val r = createRecognizer(this, lifecycleScope, settings, listener)
+        val r = PlatformRecognizer(this, settings.locale, listener)
         recognizer = r
         r.start()
     }
@@ -135,7 +202,6 @@ class BubbleService : LifecycleService() {
         override fun onPartial(text: String) = DictationBuffer.setPartial(text)
         override fun onFinal(text: String) = DictationBuffer.appendFinal(text)
         override fun onStatus(text: String) = DictationBuffer.setStatus(text)
-        override fun onUnavailable(reason: String) = DictationBuffer.setStatus(reason)
         override fun onError(reason: String) {
             DictationBuffer.setStatus(reason)
             toast(reason)
@@ -157,6 +223,12 @@ class BubbleService : LifecycleService() {
     // --- insert ---
 
     fun insertBuffer() {
+        if (typing) {
+            // Give the keyboard and the focus back to the app underneath, then type into its field.
+            endTyping()
+            bubble.postDelayed({ insertBuffer() }, 400)
+            return
+        }
         if (recognizer != null) {
             // The segment being spoken isn't final yet; insert once the engine hands it over.
             insertWhenStopped = true
@@ -261,13 +333,29 @@ class BubbleService : LifecycleService() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(Color.GRAY)
         }
-        bufferView = TextView(this).apply {
+        box = EditText(this).apply {
+            id = R.id.buffer_box
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
             setTextColor(fg)
-            maxLines = 8
-            movementMethod = ScrollingMovementMethod()
+            setHintTextColor(Color.GRAY)
+            hint = "Tap the bubble and speak. Long-press it to show or hide this panel."
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_AUTO_CORRECT
+            minLines = 2
+            maxLines = 6
             isVerticalScrollBarEnabled = true
+            background = null
             setPadding(0, dp(6), 0, dp(6))
+            addTextChangedListener(object : TextWatcher {
+                override fun afterTextChanged(e: Editable) { if (typing) DictationBuffer.setText(e.toString()) }
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            })
+            // A tap on the box while it can't take the keyboard: open the keyboard to edit by hand.
+            setOnTouchListener { _, e ->
+                if (!typing && recognizer == null && e.actionMasked == MotionEvent.ACTION_UP) beginTyping(tapMic = false)
+                false
+            }
         }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
         fun button(label: String, onClick: () -> Unit) = Button(this, null, android.R.attr.borderlessButtonStyle).apply {
@@ -278,7 +366,10 @@ class BubbleService : LifecycleService() {
             row.addView(this)
         }
         button("Hide") { togglePanel() }
-        button("Clear") { DictationBuffer.clear() }
+        button("Clear") {
+            DictationBuffer.clear()
+            if (typing) box.setText("")
+        }
         button("Copy") {
             val t = DictationBuffer.snapshot()
             if (t.isBlank()) toast("Nothing to copy yet") else { copyToClipboard(this, t); toast("Copied") }
@@ -286,18 +377,31 @@ class BubbleService : LifecycleService() {
         button("Insert") { insertBuffer() }.apply { setTypeface(typeface, Typeface.BOLD) }
 
         panel.addView(statusView)
-        panel.addView(bufferView)
+        panel.addView(box)
+        // Touching the app behind can take the focus, and Gboard with it; say so rather than pretend.
+        panel.viewTreeObserver.addOnWindowFocusChangeListener { focused ->
+            Log.i(TAG, "panel window focus=$focused typing=$typing")
+            if (!focused && typing) {
+                endTyping()
+                DictationBuffer.setStatus("The keyboard left when the app behind took the focus")
+            }
+        }
         panel.addView(row)
         panelParams = overlayParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT).apply {
             // At the top, so it never sits on the keyboard of the field it types into.
             gravity = Gravity.TOP
             y = dp(40)
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
             horizontalMargin = 0.02f
         }
     }
 
     fun togglePanel() {
-        if (panelShown) wm.removeView(panel) else wm.addView(panel, panelParams)
+        if (panelShown) {
+            endTyping()
+            wm.removeView(panel)
+        } else wm.addView(panel, panelParams)
         panelShown = !panelShown
     }
 
@@ -322,12 +426,8 @@ class BubbleService : LifecycleService() {
     }
 
     private fun render(text: String, partial: String) {
-        if (text.isEmpty() && partial.isEmpty()) {
-            bufferView.text = "Tap the bubble and speak. Long-press it to show or hide this panel."
-            bufferView.alpha = 0.5f
-            return
-        }
-        bufferView.alpha = 1f
+        // While Gboard types into the box, the box is the source and nothing overwrites it.
+        if (typing) return
         val sb = SpannableStringBuilder(text)
         if (partial.isNotBlank()) {
             if (sb.isNotEmpty()) sb.append(' ')
@@ -336,13 +436,9 @@ class BubbleService : LifecycleService() {
             sb.setSpan(ForegroundColorSpan(Color.GRAY), from, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             sb.setSpan(StyleSpan(Typeface.ITALIC), from, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        bufferView.text = sb
+        box.setText(sb)
         // Keep the newest words in view.
-        bufferView.post {
-            val layout = bufferView.layout ?: return@post
-            val scroll = layout.getLineTop(bufferView.lineCount) - bufferView.height + bufferView.paddingTop + bufferView.paddingBottom
-            bufferView.scrollTo(0, scroll.coerceAtLeast(0))
-        }
+        box.setSelection(box.length())
     }
 
     // --- notification ---
@@ -370,6 +466,7 @@ class BubbleService : LifecycleService() {
     companion object {
         const val ACTION_STOP = "com.t0msilver.voicebubble.STOP"
         const val ACTION_TOGGLE_PANEL = "com.t0msilver.voicebubble.TOGGLE_PANEL"
+        private const val TAG = "VoiceBubble"
         private const val CHANNEL = "bubble"
         private const val NOTIFICATION_ID = 1
         private const val LONG_PRESS_MS = 450L

@@ -28,7 +28,8 @@ class PlatformRecognizer(
     override fun start() {
         onDevice = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
         if (!onDevice && !SpeechRecognizer.isRecognitionAvailable(context)) {
-            listener.onUnavailable("No Android speech recognizer installed")
+            listener.onError("No Android speech recognizer installed")
+            listener.onEnded()
             return
         }
         sr = if (onDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(context)

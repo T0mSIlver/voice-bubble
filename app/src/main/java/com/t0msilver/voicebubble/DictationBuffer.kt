@@ -19,6 +19,8 @@ object DictationBuffer {
     /** One short line about the engine: which one runs, a download, an error. */
     val status: StateFlow<String> = _status
 
+    /** Rambler mode: Gboard edits the box, and the box's text is the buffer. */
+    fun setText(s: String) { _text.value = s }
     fun setPartial(s: String) { _partial.value = s }
     fun setRecording(on: Boolean) { _recording.value = on }
     fun setStatus(s: String) { _status.value = s }

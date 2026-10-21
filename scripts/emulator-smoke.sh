@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# emulator-smoke.sh: installs the debug APK on a running emulator and checks the parts that need no
-# microphone: the bubble service starts, the panel shows the buffer, and Insert types the buffer
-# into another activity's text field through the accessibility service. Screenshots and the log
-# go to smoke-out/. Speech itself can't be checked here: the emulator has no AICore and no voice.
+# emulator-smoke.sh: installs the debug APK on a running emulator and checks what needs no Gboard
+# and no voice: the bubble service starts, a bubble tap opens the floating box with the keyboard on
+# it, keys typed then land in the buffer, and Insert types the buffer into another activity's field
+# through the accessibility service. It also logs whether a swipe on the app behind takes the
+# keyboard away from the box. Screenshots and logs go to smoke-out/.
 set -euo pipefail
 
 APK=${1:-app/build/outputs/apk/debug/app-debug.apk}
@@ -28,26 +29,41 @@ echo "ok: bubble service running"
 
 adb shell am start -W -n "$PKG/.TestTargetActivity"
 sleep 3
-debug --es append "this is dictated text" --ez panel true
+imeshown() { adb shell dumpsys input_method | grep -o 'mInputShown=[a-z]*' | head -1; }
+
+# Rambler mode: a bubble tap opens the floating box with the keyboard on it. The emulator has no
+# Gboard, so typed keys stand in for Rambler; they must land in the box, not the app behind.
+debug --ez panel true
+sleep 1
+debug --ez record true
+sleep 3
+shot 2-box-with-keyboard
+echo "after bubble tap: $(imeshown)"
+adb shell dumpsys window | grep -E 'mCurrentFocus' | head -2 | tee "$OUT/focus-typing.txt"
+adb shell input text "rambler%stext"
 sleep 2
-shot 2-panel
-adb shell dumpsys window windows > "$OUT/windows.txt"
-grep -c "$PKG" "$OUT/windows.txt" || true
+debug
+adb logcat -d -s VoiceBubble:* | grep -q "buffer='rambler text'" || fail "typed text didn't reach the box's buffer"
+echo "ok: keys typed while the box is open land in the buffer"
 
 debug --ez insert true
 sleep 3
 shot 3-inserted
 adb shell uiautomator dump /sdcard/ui.xml > /dev/null
 adb pull /sdcard/ui.xml "$OUT/ui.xml" > /dev/null
-grep -q 'text="Hello this is dictated text"' "$OUT/ui.xml" || fail "the field doesn't hold the inserted text"
-echo "ok: Insert typed the buffer into the focused field"
+grep -q 'text="Hello rambler text"' "$OUT/ui.xml" || fail "the app's field doesn't hold the inserted text"
+echo "ok: Insert typed the buffer into the app's focused field"
 
-# Speech engines on the emulator: expected to report unavailable and fall back; logged, not asserted.
-debug --ez record true
-sleep 6
-shot 4-recording
+# The open question: does scrolling the app behind keep the keyboard on the box? Logged, not asserted.
+read -r W H < <(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' ')
 debug --ez record true
 sleep 3
+echo "before swipe: $(imeshown)"
+adb shell input swipe $((W / 2)) $((H * 60 / 100)) $((W / 2)) $((H * 40 / 100)) 300
+sleep 2
+shot 4-after-swipe
+echo "after swipe on the app behind: $(imeshown)"
+adb shell dumpsys window | grep -E 'mCurrentFocus' | head -2 | tee "$OUT/focus-after-swipe.txt"
 debug
 adb logcat -d -s VoiceBubble:* > "$OUT/voicebubble.log"
 adb logcat -d > "$OUT/logcat.txt"

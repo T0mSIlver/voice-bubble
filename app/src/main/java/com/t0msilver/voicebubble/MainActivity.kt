@@ -22,19 +22,13 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.AdapterView
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 
-/** Setup: the four permissions, the engine, the language, and the switch for the bubble. */
+/** Setup: the four permissions, the listening mode, and the switch for the bubble. */
 class MainActivity : Activity() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var settings: Settings
     private lateinit var root: LinearLayout
     private val steps = mutableListOf<() -> Unit>()
-    private lateinit var engineStatus: TextView
+    private lateinit var keyboardStatus: TextView
     private lateinit var bubbleButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,7 +41,7 @@ class MainActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(root); fitsSystemWindows = true })
 
         heading("Voice Bubble")
-        para("A floating mic over any app. Tap it to dictate while you keep scrolling; the text collects in a panel (long-press the bubble) that you insert into the field you're editing, or copy.")
+        para("A floating mic over any app. Tap it and Gboard's Rambler types into a small floating box instead of the app; then Insert puts the text into the field you're editing, or Copy takes it.")
 
         section("1. Permissions")
         step("Microphone", { has(Manifest.permission.RECORD_AUDIO) }) {
@@ -59,38 +53,44 @@ class MainActivity : Activity() {
         step("Display over other apps", { AndroidSettings.canDrawOverlays(this) }) {
             startActivity(Intent(AndroidSettings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
-        step("Accessibility, to insert into any field (optional: without it, Insert copies)", { accessibilityOn() }) {
+        step("Accessibility, to tap Gboard's mic and insert into any field (optional: without it, Insert copies)", { accessibilityOn() }) {
             startActivity(Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS))
         }
 
-        section("2. Speech engine")
+        section("2. How the bubble listens")
+        keyboardStatus = para("")
         val group = RadioGroup(this)
-        Engine.entries.forEach { e ->
+        Mode.entries.forEach { m ->
             group.addView(RadioButton(this).apply {
                 id = View.generateViewId()
-                text = e.title
-                isChecked = settings.engine == e
-                setOnCheckedChangeListener { _, on -> if (on) settings.engine = e }
+                text = m.title
+                isChecked = settings.mode == m
+                setOnCheckedChangeListener { _, on -> if (on) settings.mode = m }
+            })
+            group.addView(TextView(this).apply {
+                text = m.detail
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setPadding(dp(32), 0, 0, dp(8))
             })
         }
         root.addView(group)
-
+        root.addView(CheckBox(this).apply {
+            text = "Rambler mode: tap Gboard's mic for me (needs Accessibility)"
+            isChecked = settings.autoMic
+            setOnCheckedChangeListener { _, on -> settings.autoMic = on }
+        })
+        para("Language for Keep scrolling mode:")
         val labels = Settings.LANGUAGES.map { it.second }
         root.addView(Spinner(this).apply {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, labels)
             setSelection(Settings.LANGUAGES.indexOfFirst { it.first == settings.languageTag }.coerceAtLeast(0))
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                    if (settings.languageTag != Settings.LANGUAGES[pos].first) {
-                        settings.languageTag = Settings.LANGUAGES[pos].first
-                        checkEngines()
-                    }
+                    settings.languageTag = Settings.LANGUAGES[pos].first
                 }
                 override fun onNothingSelected(p: AdapterView<*>?) = Unit
             }
         })
-        engineStatus = para("")
-        root.addView(Button(this).apply { text = "Check engines"; setOnClickListener { checkEngines() } })
         root.addView(CheckBox(this).apply {
             text = "Clear the text after Insert"
             isChecked = settings.clearAfterInsert
@@ -105,20 +105,14 @@ class MainActivity : Activity() {
             }
         }
         root.addView(bubbleButton)
-        para("Tap: start or stop dictating. Long-press: show or hide the text panel. Drag: move it. Turn it off from here or from its notification.")
+        para("Tap: start or stop dictating (in Rambler mode, tap the bubble again to finish). Long-press: show or hide the text panel. Drag: move it. Turn it off from here or from its notification.")
 
-        checkEngines()
         if (intent?.getBooleanExtra(EXTRA_START_BUBBLE, false) == true) startBubble()
     }
 
     override fun onResume() {
         super.onResume()
         refresh()
-    }
-
-    override fun onDestroy() {
-        scope.cancel()
-        super.onDestroy()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -136,23 +130,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun checkEngines() {
-        engineStatus.text = "Checking engines…"
-        scope.launch {
-            val locale = settings.locale
-            val adv = MlKitRecognizer.describeStatus(locale, advanced = true)
-            val basic = MlKitRecognizer.describeStatus(locale, advanced = false)
-            val platform = when {
-                android.speech.SpeechRecognizer.isOnDeviceRecognitionAvailable(this@MainActivity) -> "on-device available"
-                android.speech.SpeechRecognizer.isRecognitionAvailable(this@MainActivity) -> "available (may use the network)"
-                else -> "not installed"
-            }
-            engineStatus.text = "For ${locale.toLanguageTag()}:\n• Gemini Nano (ML Kit advanced): $adv\n• ML Kit basic: $basic\n• Android recognizer: $platform"
-        }
-    }
-
     private fun refresh() {
         steps.forEach { it() }
+        val ime = AndroidSettings.Secure.getString(contentResolver, AndroidSettings.Secure.DEFAULT_INPUT_METHOD).orEmpty()
+        keyboardStatus.text = if (ime.startsWith(GBOARD)) "✓ Gboard is your keyboard. Turn Rambler on in Gboard's voice typing settings."
+        else "○ Rambler mode needs Gboard as your keyboard (now: ${ime.substringBefore('/').ifEmpty { "unknown" }})"
         bubbleButton.text = if (BubbleService.instance != null) "Turn the bubble off" else "Turn the bubble on"
     }
 
@@ -202,5 +184,6 @@ class MainActivity : Activity() {
 
     companion object {
         const val EXTRA_START_BUBBLE = "start_bubble"
+        private const val GBOARD = "com.google.android.inputmethod.latin/"
     }
 }
